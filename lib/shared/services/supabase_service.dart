@@ -219,8 +219,8 @@ class SupabaseService {
       final products = List<Map<String, dynamic>>.from(response).map((product) {
         return {...product, 'costPrice': product['cost_price'] ?? 0};
       }).toList();
+      await OfflineStore.cacheProducts(userId, products);
       final mergedProducts = _mergePendingProducts(userId, products);
-      await OfflineStore.cacheProducts(userId, mergedProducts);
       syncCubit.setOffline(OfflineStore.pendingCount(userId) > 0);
       return mergedProducts;
     } catch (error) {
@@ -230,7 +230,7 @@ class SupabaseService {
         throw StateError('Data produk belum tersedia offline: $error');
       }
       debugPrint('Memuat produk dari cache offline: $error');
-      return cached;
+      return _mergePendingProducts(userId, cached);
     }
   }
 
@@ -302,16 +302,37 @@ class SupabaseService {
     required List<Map<String, dynamic>> items,
   }) async {
     final userId = _requireUserId();
+    final productsById = {
+      for (final product in await fetchProducts())
+        product['id'].toString(): product,
+    };
 
     final itemsToInsert = items.map((item) {
       final qty = item['quantity'] as int;
       final price = item['unitPrice'] as int;
+      if (qty <= 0) {
+        throw StateError('Jumlah ${item['name']} harus lebih dari nol.');
+      }
+      final productId = item['id']?.toString();
+      final product = productId == null ? null : productsById[productId];
+      if (product == null) {
+        throw StateError('Produk ${item['name']} tidak ditemukan.');
+      }
+      final availableStock = (product['stock'] as num?)?.toInt() ?? 0;
+      if (qty > availableStock) {
+        throw StateError(
+          availableStock <= 0
+              ? 'Stok ${item['name']} habis.'
+              : 'Stok ${item['name']} hanya tersisa $availableStock.',
+        );
+      }
       final costPrice = (item['costPrice'] as num?)?.toInt();
       if (costPrice == null) {
         throw StateError('Harga modal produk ${item['name']} tidak tersedia.');
       }
       return {
         'transaction_id': trxId,
+        'product_id': item['id'],
         'product_name': item['name'],
         'quantity': qty,
         'unit_price': price,
@@ -332,7 +353,9 @@ class SupabaseService {
     };
     await OfflineStore.cacheTransaction(userId, transaction);
     await OfflineStore.enqueue(userId, 'transaction', transaction);
-    syncCubit.transactionsChanged();
+    syncCubit
+      ..productsChanged()
+      ..transactionsChanged();
     await _syncPendingChanges();
   }
 
@@ -517,6 +540,24 @@ class SupabaseService {
         };
       } else if (operation['type'] == 'product_delete') {
         byId.remove(payload['id'].toString());
+      } else if (operation['type'] == 'transaction') {
+        final items = payload['transaction_items'] as List? ?? const [];
+        for (final item in items) {
+          final transactionItem = Map<String, dynamic>.from(item as Map);
+          final productId = transactionItem['product_id']?.toString();
+          if (productId == null) continue;
+          final product = byId[productId];
+          if (product == null) continue;
+
+          final stock = (product['stock'] as num?)?.toInt() ?? 0;
+          final quantity = (transactionItem['quantity'] as num?)?.toInt() ?? 0;
+          final remainingStock = stock > quantity ? stock - quantity : 0;
+          byId[productId] = {
+            ...product,
+            'stock': remainingStock,
+            'status': remainingStock > 0 ? 'tersedia' : 'habis',
+          };
+        }
       }
     }
     return byId.values.toList();
@@ -562,17 +603,10 @@ class SupabaseService {
             await client.from('profiles').upsert(payload);
             break;
           case 'transaction':
-            final items = (payload['transaction_items'] as List)
-                .map((item) => Map<String, dynamic>.from(item as Map))
-                .toList();
-            final header = Map<String, dynamic>.from(payload)
-              ..remove('transaction_items');
-            await client.from('transactions').upsert(header, onConflict: 'id');
-            await client
-                .from('transaction_items')
-                .delete()
-                .eq('transaction_id', payload['id']);
-            await client.from('transaction_items').insert(items);
+            await client.rpc(
+              'complete_transaction_with_stock',
+              params: {'transaction_data': payload},
+            );
             break;
           default:
             throw StateError('Jenis sinkronisasi tidak dikenali.');

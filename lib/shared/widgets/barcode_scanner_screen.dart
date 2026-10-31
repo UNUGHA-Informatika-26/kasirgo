@@ -560,8 +560,19 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen>
                         style: const TextStyle(fontSize: 12, color: textGrey),
                       ),
                       Text(
-                        'Stok ${_scannedProduct['stock']}',
-                        style: const TextStyle(fontSize: 12, color: textGrey),
+                        (_scannedProduct['stock'] as num? ?? 0) <= 0
+                            ? 'Habis'
+                            : (_scannedProduct['stock'] as num? ?? 0) <= 5
+                            ? 'Stok menipis • ${_scannedProduct['stock']}'
+                            : 'Stok ${_scannedProduct['stock']}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: (_scannedProduct['stock'] as num? ?? 0) <= 0
+                              ? const Color(0xFFDC2626)
+                              : (_scannedProduct['stock'] as num? ?? 0) <= 5
+                              ? const Color(0xFFD97706)
+                              : textGrey,
+                        ),
                       ),
                     ],
                   ),
@@ -615,14 +626,26 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen>
                       ),
                     ),
                     GestureDetector(
-                      onTap: () {
-                        _scannerCubit.incrementQuantity();
-                      },
+                      onTap:
+                          _scanQuantity <
+                              ((_scannedProduct['stock'] as num?)?.toInt() ?? 0)
+                          ? () => _scannerCubit.incrementQuantity(
+                              maxQuantity:
+                                  (_scannedProduct['stock'] as num?)?.toInt() ??
+                                  0,
+                            )
+                          : null,
                       child: Container(
                         width: 32,
                         height: 32,
                         decoration: BoxDecoration(
-                          color: primaryBlue,
+                          color:
+                              _scanQuantity <
+                                  ((_scannedProduct['stock'] as num?)
+                                          ?.toInt() ??
+                                      0)
+                              ? primaryBlue
+                              : const Color(0xFF94A3B8),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Center(
@@ -673,17 +696,22 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen>
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      onPressed: () {
-                        if (widget.onAddProductToCart != null) {
-                          widget.onAddProductToCart!(
-                            _scannedProduct,
-                            _scanQuantity,
-                          );
-                        }
-                        Navigator.pop(context);
-                      },
-                      child: const Text(
-                        'Tambah ke Keranjang',
+                      onPressed:
+                          ((_scannedProduct['stock'] as num?)?.toInt() ?? 0) > 0
+                          ? () {
+                              if (widget.onAddProductToCart != null) {
+                                widget.onAddProductToCart!(
+                                  _scannedProduct,
+                                  _scanQuantity,
+                                );
+                              }
+                              Navigator.pop(context);
+                            }
+                          : null,
+                      child: Text(
+                        ((_scannedProduct['stock'] as num?)?.toInt() ?? 0) > 0
+                            ? 'Tambah ke Keranjang'
+                            : 'Stok habis',
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),

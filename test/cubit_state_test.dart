@@ -44,6 +44,16 @@ void main() {
     await cubit.close();
   });
 
+  test('scanner quantity cannot exceed available stock', () async {
+    final cubit = ScannerCubit();
+    cubit
+      ..incrementQuantity(maxQuantity: 1)
+      ..incrementQuantity(maxQuantity: 2)
+      ..incrementQuantity(maxQuantity: 2);
+    expect(cubit.state.quantity, 2);
+    await cubit.close();
+  });
+
   test('sync state tracks offline status and data revisions', () async {
     final cubit = SyncCubit();
     cubit

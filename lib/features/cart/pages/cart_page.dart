@@ -95,12 +95,20 @@ class _CartPageState extends State<CartPage> {
 
   // Tambah Barang dari Hasil Pencarian ke Keranjang
   void _addProductToCart(Map<String, dynamic> product) {
-    _cartCubit.addProduct(product);
+    final added = _cartCubit.addProduct(product);
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${product['name']} berhasil ditambahkan ke keranjang!'),
-        backgroundColor: const Color(0xFF10B981),
+        content: Text(
+          added
+              ? '${product['name']} berhasil ditambahkan ke keranjang!'
+              : (product['stock'] as num? ?? 0) <= 0
+              ? 'Stok ${product['name']} habis.'
+              : 'Jumlah ${product['name']} di keranjang sudah mencapai stok.',
+        ),
+        backgroundColor: added
+            ? const Color(0xFF10B981)
+            : const Color(0xFFDC2626),
         duration: const Duration(seconds: 1),
       ),
     );
@@ -108,7 +116,14 @@ class _CartPageState extends State<CartPage> {
 
   // Tambah Kuantitas di Keranjang
   void _incrementQuantity(Map<String, dynamic> item) {
-    _cartCubit.increment(item['id'].toString());
+    if (!_cartCubit.increment(item['id'].toString())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Stok ${item['name']} tidak mencukupi.'),
+          backgroundColor: const Color(0xFFDC2626),
+        ),
+      );
+    }
   }
 
   // Kurangi Kuantitas di Keranjang
@@ -118,12 +133,18 @@ class _CartPageState extends State<CartPage> {
 
   // Tambah barang dari hasil Scan Barcode ke Keranjang
   void _addItemFromScan(Map<String, dynamic> scannedProduct, int qty) {
-    _cartCubit.addScannedProduct(scannedProduct, qty);
+    final added = _cartCubit.addScannedProduct(scannedProduct, qty);
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${scannedProduct['name']} ($qty item) masuk keranjang!'),
-        backgroundColor: const Color(0xFF10B981),
+        content: Text(
+          added
+              ? '${scannedProduct['name']} ($qty item) masuk keranjang!'
+              : 'Stok ${scannedProduct['name']} tidak mencukupi.',
+        ),
+        backgroundColor: added
+            ? const Color(0xFF10B981)
+            : const Color(0xFFDC2626),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -405,6 +426,18 @@ class _CartPageState extends State<CartPage> {
                               itemBuilder: (context, index) {
                                 final product = _searchResults[index];
                                 final price = product['price'] as int;
+                                final stock =
+                                    (product['stock'] as num?)?.toInt() ?? 0;
+                                final quantityInCart = _cartItems
+                                    .where(
+                                      (item) => item['id'] == product['id'],
+                                    )
+                                    .fold<int>(
+                                      0,
+                                      (total, item) =>
+                                          total + (item['quantity'] as int),
+                                    );
+                                final canAdd = quantityInCart < stock;
 
                                 return Container(
                                   padding: const EdgeInsets.symmetric(
@@ -444,6 +477,14 @@ class _CartPageState extends State<CartPage> {
                                                 color: textGrey,
                                               ),
                                             ),
+                                            if (stock > 0 && stock <= 5)
+                                              Text(
+                                                'Stok menipis • $stock tersisa',
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: Color(0xFFD97706),
+                                                ),
+                                              ),
                                             const SizedBox(height: 2),
                                             // 3. Harga Barang
                                             Text(
@@ -472,14 +513,19 @@ class _CartPageState extends State<CartPage> {
                                             vertical: 8,
                                           ),
                                         ),
-                                        onPressed: () =>
-                                            _addProductToCart(product),
+                                        onPressed: canAdd
+                                            ? () => _addProductToCart(product)
+                                            : null,
                                         icon: const Icon(
                                           Icons.add_rounded,
                                           size: 18,
                                         ),
-                                        label: const Text(
-                                          'Tambah',
+                                        label: Text(
+                                          stock <= 0
+                                              ? 'Habis'
+                                              : canAdd
+                                              ? 'Tambah'
+                                              : 'Stok penuh',
                                           style: TextStyle(
                                             fontSize: 13,
                                             fontWeight: FontWeight.bold,
@@ -536,6 +582,10 @@ class _CartPageState extends State<CartPage> {
                                 const SizedBox(height: 12),
                             itemBuilder: (context, index) {
                               final item = _cartItems[index];
+                              final stock =
+                                  (item['stock'] as num?)?.toInt() ?? 0;
+                              final canIncrement =
+                                  (item['quantity'] as int) < stock;
                               final itemTotal =
                                   (item['unitPrice'] as int) *
                                   (item['quantity'] as int);
@@ -650,13 +700,17 @@ class _CartPageState extends State<CartPage> {
                                           ),
                                           // Plus Button
                                           GestureDetector(
-                                            onTap: () =>
-                                                _incrementQuantity(item),
+                                            onTap: canIncrement
+                                                ? () =>
+                                                      _incrementQuantity(item)
+                                                : null,
                                             child: Container(
                                               width: 28,
                                               height: 28,
                                               decoration: BoxDecoration(
-                                                color: primaryBlue,
+                                                color: canIncrement
+                                                    ? primaryBlue
+                                                    : const Color(0xFF94A3B8),
                                                 borderRadius:
                                                     BorderRadius.circular(8),
                                               ),

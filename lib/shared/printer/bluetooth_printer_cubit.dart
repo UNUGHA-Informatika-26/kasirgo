@@ -1,10 +1,13 @@
 import 'dart:async';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_bluetooth_printer/flutter_bluetooth_printer.dart';
 
 import '../utils/currency_formatter.dart';
+
+const _bluetoothPermissionChannel = MethodChannel('kasirgo/bluetooth');
 
 class ReceiptPrintData {
   final String transactionId;
@@ -94,6 +97,33 @@ class BluetoothPrinterCubit extends Cubit<BluetoothPrinterState> {
     );
 
     try {
+      final accessStatus = await _requestBluetoothAccessAndEnable();
+      if (isClosed) return;
+      if (accessStatus == 'permissionDenied') {
+        emit(
+          state.copyWith(
+            isScanning: false,
+            error:
+                'Izin perangkat sekitar ditolak. Izinkan akses perangkat '
+                'terdekat untuk KasirGo agar dapat mencari printer.',
+          ),
+        );
+        return;
+      }
+      if (accessStatus == 'bluetoothDisabled') {
+        emit(
+          state.copyWith(
+            isScanning: false,
+            isBluetoothDisabled: true,
+            error: 'Bluetooth tidak diaktifkan. Aktifkan Bluetooth, lalu coba lagi.',
+          ),
+        );
+        return;
+      }
+      if (accessStatus != null && accessStatus != 'enabled') {
+        throw StateError('Status akses Bluetooth tidak dikenal: $accessStatus');
+      }
+
       final bluetoothState = await FlutterBluetoothPrinter.getState();
       if (isClosed) return;
       if (bluetoothState == BluetoothState.disabled) {
@@ -189,6 +219,16 @@ class BluetoothPrinterCubit extends Cubit<BluetoothPrinterState> {
         );
       }
     }
+  }
+
+  Future<String?> _requestBluetoothAccessAndEnable() {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return Future<String?>.value();
+    }
+
+    return _bluetoothPermissionChannel.invokeMethod<String>(
+      'requestBluetoothAccessAndEnable',
+    );
   }
 
   Future<void> printReceipt(

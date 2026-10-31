@@ -71,17 +71,35 @@ class CartCubit extends Cubit<CartState> {
   Future<void> loadProducts() async {
     final products = await SupabaseService.fetchProducts();
     ProductData.replaceProducts(products);
-    emit(state.copyWith(products: products));
+    final productsById = {
+      for (final product in products) product['id'].toString(): product,
+    };
+    final cartItems = _copyItems(state.cartItems)
+      ..forEach((item) {
+        final product = productsById[item['id'].toString()];
+        if (product != null) {
+          item['stock'] = (product['stock'] as num?)?.toInt() ?? 0;
+        }
+      });
+    emit(state.copyWith(products: products, cartItems: cartItems));
+    final userId = _userId;
+    if (userId != null) unawaited(OfflineStore.cacheCart(userId, cartItems));
   }
 
   void search(String query) => emit(state.copyWith(searchQuery: query));
 
-  void addProduct(Map<String, dynamic> product) {
+  bool addProduct(Map<String, dynamic> product) {
+    final stock = (product['stock'] as num?)?.toInt() ?? 0;
+    if (stock <= 0) return false;
+
     final price = (product['price'] ?? product['unitPrice'] ?? 0) as int;
     final items = _copyItems(state.cartItems);
     final index = items.indexWhere((item) => item['id'] == product['id']);
     if (index >= 0) {
-      items[index]['quantity'] = (items[index]['quantity'] as int) + 1;
+      final quantity = items[index]['quantity'] as int;
+      if (quantity >= stock) return false;
+      items[index]['quantity'] = quantity + 1;
+      items[index]['stock'] = stock;
     } else {
       items.add({
         'id': product['id'],
@@ -89,35 +107,50 @@ class CartCubit extends Cubit<CartState> {
         'barcode': product['barcode'] ?? '',
         'unitPrice': price,
         'costPrice': (product['costPrice'] as num?)?.toInt() ?? 0,
+        'stock': stock,
         'quantity': 1,
       });
     }
     _emitAndPersist(items);
+    return true;
   }
 
-  void addScannedProduct(Map<String, dynamic> product, int quantity) {
+  bool addScannedProduct(Map<String, dynamic> product, int quantity) {
+    final stock = (product['stock'] as num?)?.toInt() ?? 0;
+    if (quantity <= 0 || stock <= 0) return false;
+
     final items = _copyItems(state.cartItems);
     final index = items.indexWhere((item) => item['id'] == product['id']);
     if (index >= 0) {
-      items[index]['quantity'] = (items[index]['quantity'] as int) + quantity;
+      final totalQuantity = (items[index]['quantity'] as int) + quantity;
+      if (totalQuantity > stock) return false;
+      items[index]['quantity'] = totalQuantity;
+      items[index]['stock'] = stock;
     } else {
+      if (quantity > stock) return false;
       items.add({
         'id': product['id'],
         'name': product['name'],
         'barcode': product['barcode'],
         'unitPrice': product['unitPrice'],
         'costPrice': (product['costPrice'] as num?)?.toInt() ?? 0,
+        'stock': stock,
         'quantity': quantity,
       });
     }
     _emitAndPersist(items);
+    return true;
   }
 
-  void increment(String productId) {
+  bool increment(String productId) {
     final items = _copyItems(state.cartItems);
     final item = items.firstWhere((entry) => entry['id'] == productId);
-    item['quantity'] = (item['quantity'] as int) + 1;
+    final quantity = item['quantity'] as int;
+    final stock = (item['stock'] as num?)?.toInt() ?? 0;
+    if (quantity >= stock) return false;
+    item['quantity'] = quantity + 1;
     _emitAndPersist(items);
+    return true;
   }
 
   void decrement(String productId) {

@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../shared/cubit/sync_cubit.dart';
+import '../../../shared/services/supabase_service.dart';
 import '../cubit/products_cubit.dart';
 import '../../../shared/utils/currency_formatter.dart';
 import '../../../shared/widgets/barcode_scanner_screen.dart';
@@ -15,11 +19,20 @@ class ProductsPage extends StatefulWidget {
 class _ProductsPageState extends State<ProductsPage> {
   final TextEditingController _searchController = TextEditingController();
   final ProductsCubit _productsCubit = ProductsCubit();
+  StreamSubscription<SyncState>? _syncSubscription;
+  late int _lastProductsRevision;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
+    _lastProductsRevision = SupabaseService.syncCubit.state.productsRevision;
+    _syncSubscription = SupabaseService.syncCubit.stream.listen((state) {
+      if (state.productsRevision != _lastProductsRevision) {
+        _lastProductsRevision = state.productsRevision;
+        _loadProducts();
+      }
+    });
     _loadProducts();
   }
 
@@ -40,7 +53,8 @@ class _ProductsPageState extends State<ProductsPage> {
   @override
   void dispose() {
     _searchController.dispose();
-    _productsCubit.close();
+    unawaited(_syncSubscription?.cancel());
+    unawaited(_productsCubit.close());
     super.dispose();
   }
 
@@ -358,12 +372,20 @@ class _ProductsPageState extends State<ProductsPage> {
                     final costPrice =
                         int.tryParse(costPriceController.text) ?? 0;
                     final price = int.tryParse(priceController.text) ?? 0;
-                    final stock = int.tryParse(stockController.text) ?? 0;
+                    final stock = int.tryParse(stockController.text);
 
                     if (name.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Nama barang wajib diisi.'),
+                        ),
+                      );
+                      return;
+                    }
+                    if (stock == null || stock < 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Stok harus berupa angka nol atau lebih.'),
                         ),
                       );
                       return;
@@ -588,6 +610,17 @@ class _ProductsPageState extends State<ProductsPage> {
                       itemBuilder: (context, index) {
                         final item = _filteredProducts[index];
                         final costPrice = (item['costPrice'] ?? 0) as int;
+                        final stock = (item['stock'] as num?)?.toInt() ?? 0;
+                        final stockLabel = stock <= 0
+                            ? 'Habis'
+                            : stock <= 5
+                            ? 'Stok menipis'
+                            : item['status'] ?? 'tersedia';
+                        final stockColor = stock <= 0
+                            ? const Color(0xFFDC2626)
+                            : stock <= 5
+                            ? const Color(0xFFD97706)
+                            : textGrey;
 
                         return Container(
                           padding: const EdgeInsets.all(16),
@@ -644,19 +677,20 @@ class _ProductsPageState extends State<ProductsPage> {
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       Text(
-                                        'Stok ${item['stock']}',
-                                        style: const TextStyle(
+                                        'Stok $stock',
+                                        style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.bold,
-                                          color: textDark,
+                                          color: stockColor,
                                         ),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        item['status'] ?? 'tersedia',
+                                        stockLabel,
                                         style: const TextStyle(
                                           fontSize: 12,
-                                          color: textGrey,
+                                        ).copyWith(
+                                          color: stockColor,
                                         ),
                                       ),
                                     ],

@@ -46,8 +46,10 @@ class ScannerCubit extends Cubit<ScannerState> {
 
   void retry() => emit(state.copyWith(status: ScannerStatus.scanning));
 
-  void incrementQuantity() =>
-      emit(state.copyWith(quantity: state.quantity + 1));
+  void incrementQuantity({int? maxQuantity}) {
+    if (maxQuantity != null && state.quantity >= maxQuantity) return;
+    emit(state.copyWith(quantity: state.quantity + 1));
+  }
 
   void decrementQuantity() {
     if (state.quantity > 1) emit(state.copyWith(quantity: state.quantity - 1));
