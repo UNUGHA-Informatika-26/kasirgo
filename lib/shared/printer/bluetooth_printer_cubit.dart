@@ -37,6 +37,8 @@ class BluetoothPrinterState {
   final bool isScanning;
   final bool isPrinting;
   final bool isPrinted;
+  final String? printingAddress;
+  final bool isBluetoothDisabled;
   final String? error;
 
   const BluetoothPrinterState({
@@ -44,6 +46,8 @@ class BluetoothPrinterState {
     this.isScanning = false,
     this.isPrinting = false,
     this.isPrinted = false,
+    this.printingAddress,
+    this.isBluetoothDisabled = false,
     this.error,
   });
 
@@ -52,6 +56,9 @@ class BluetoothPrinterState {
     bool? isScanning,
     bool? isPrinting,
     bool? isPrinted,
+    String? printingAddress,
+    bool clearPrintingAddress = false,
+    bool? isBluetoothDisabled,
     String? error,
     bool clearError = false,
   }) {
@@ -60,6 +67,10 @@ class BluetoothPrinterState {
       isScanning: isScanning ?? this.isScanning,
       isPrinting: isPrinting ?? this.isPrinting,
       isPrinted: isPrinted ?? this.isPrinted,
+      printingAddress: clearPrintingAddress
+          ? null
+          : printingAddress ?? this.printingAddress,
+      isBluetoothDisabled: isBluetoothDisabled ?? this.isBluetoothDisabled,
       error: clearError ? null : error ?? this.error,
     );
   }
@@ -74,10 +85,39 @@ class BluetoothPrinterCubit extends Cubit<BluetoothPrinterState> {
     await _discoverySubscription?.cancel();
     final found = <String, BluetoothDevice>{};
     emit(
-      state.copyWith(printers: const [], isScanning: true, clearError: true),
+      state.copyWith(
+        printers: const [],
+        isScanning: true,
+        isBluetoothDisabled: false,
+        clearError: true,
+      ),
     );
 
     try {
+      final bluetoothState = await FlutterBluetoothPrinter.getState();
+      if (isClosed) return;
+      if (bluetoothState == BluetoothState.disabled) {
+        emit(
+          state.copyWith(
+            isScanning: false,
+            isBluetoothDisabled: true,
+            error: 'Bluetooth tidak aktif. Aktifkan Bluetooth, lalu coba lagi.',
+          ),
+        );
+        return;
+      }
+      if (bluetoothState == BluetoothState.notPermitted) {
+        emit(
+          state.copyWith(
+            isScanning: false,
+            error:
+                'Izin Bluetooth ditolak. Izinkan akses perangkat terdekat '
+                'untuk KasirGo di Setelan Android.',
+          ),
+        );
+        return;
+      }
+
       _discoverySubscription = FlutterBluetoothPrinter.discovery.listen(
         (discoveryState) {
           if (discoveryState is DiscoveryResult) {
@@ -85,12 +125,19 @@ class BluetoothPrinterCubit extends Cubit<BluetoothPrinterState> {
               found[printer.address] = printer;
             }
             if (!isClosed) {
-              emit(state.copyWith(printers: found.values.toList()));
+              emit(
+                state.copyWith(
+                  printers: found.values.toList(),
+                  isBluetoothDisabled: false,
+                ),
+              );
             }
           } else if (discoveryState is BluetoothDisabledState) {
             if (!isClosed) {
               emit(
                 state.copyWith(
+                  isScanning: false,
+                  isBluetoothDisabled: true,
                   error: 'Aktifkan Bluetooth di Android, lalu cari lagi.',
                 ),
               );
@@ -122,6 +169,7 @@ class BluetoothPrinterCubit extends Cubit<BluetoothPrinterState> {
         emit(
           state.copyWith(
             isScanning: false,
+            isBluetoothDisabled: false,
             error: found.isEmpty && state.error == null
                 ? 'Printer tidak ditemukan. Pastikan printer menyala dan '
                       'sudah dipasangkan melalui Setelan Bluetooth Android.'
@@ -148,7 +196,17 @@ class BluetoothPrinterCubit extends Cubit<BluetoothPrinterState> {
     ReceiptPrintData receipt,
   ) async {
     if (state.isPrinting) return;
-    emit(state.copyWith(isPrinting: true, isPrinted: false, clearError: true));
+    await _discoverySubscription?.cancel();
+    _discoverySubscription = null;
+    emit(
+      state.copyWith(
+        isScanning: false,
+        isPrinting: true,
+        printingAddress: printer.address,
+        isPrinted: false,
+        clearError: true,
+      ),
+    );
 
     var connected = false;
     String? errorMessage;
@@ -183,9 +241,21 @@ class BluetoothPrinterCubit extends Cubit<BluetoothPrinterState> {
 
     if (isClosed) return;
     if (errorMessage != null) {
-      emit(state.copyWith(isPrinting: false, error: errorMessage));
+      emit(
+        state.copyWith(
+          isPrinting: false,
+          clearPrintingAddress: true,
+          error: errorMessage,
+        ),
+      );
     } else {
-      emit(state.copyWith(isPrinting: false, isPrinted: true));
+      emit(
+        state.copyWith(
+          isPrinting: false,
+          clearPrintingAddress: true,
+          isPrinted: true,
+        ),
+      );
     }
   }
 

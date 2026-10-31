@@ -66,7 +66,7 @@ class _BluetoothPrinterDialogState extends State<BluetoothPrinterDialog> {
             title: const Text('Printer Bluetooth'),
             content: SizedBox(
               width: double.maxFinite,
-              child: state.isScanning
+              child: state.isScanning && state.printers.isEmpty
                   ? const Center(
                       child: Padding(
                         padding: EdgeInsets.all(24),
@@ -74,10 +74,53 @@ class _BluetoothPrinterDialogState extends State<BluetoothPrinterDialog> {
                       ),
                     )
                   : state.printers.isEmpty
-                  ? Text(state.error ?? 'Tidak ada printer ditemukan.')
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          state.isBluetoothDisabled
+                              ? Icons.bluetooth_disabled
+                              : Icons.print_disabled_outlined,
+                          size: 36,
+                          color: state.isBluetoothDisabled
+                              ? Theme.of(context).colorScheme.error
+                              : null,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          state.error ?? 'Tidak ada printer ditemukan.',
+                          textAlign: TextAlign.center,
+                        ),
+                        if (state.isBluetoothDisabled) ...[
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Aktifkan Bluetooth dari panel cepat atau Setelan '
+                            'perangkat, lalu tekan Cari lagi.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ],
+                    )
                   : ListView(
                       shrinkWrap: true,
                       children: [
+                        if (state.isScanning)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Text('Mencari printer lain...'),
+                              ],
+                            ),
+                          ),
                         if (state.error != null)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 8),
@@ -94,7 +137,7 @@ class _BluetoothPrinterDialogState extends State<BluetoothPrinterDialog> {
                             leading: const Icon(Icons.print_outlined),
                             title: Text(printer.name ?? 'Printer Tanpa Nama'),
                             subtitle: Text(printer.address),
-                            trailing: state.isPrinting
+                            trailing: state.printingAddress == printer.address
                                 ? const SizedBox(
                                     width: 20,
                                     height: 20,

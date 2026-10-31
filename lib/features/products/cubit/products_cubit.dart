@@ -60,13 +60,23 @@ class ProductsCubit extends Cubit<ProductsState> {
   void search(String query) => emit(state.copyWith(query: query));
 
   Future<void> insertProduct(Map<String, dynamic> product) async {
-    await SupabaseService.insertProduct(product);
-    await loadProducts();
+    final savedProduct = await SupabaseService.insertProduct(product);
+    final products = [savedProduct, ...state.products];
+    ProductData.replaceProducts(products);
+    emit(state.copyWith(products: products));
   }
 
   Future<void> updateProduct(String id, Map<String, dynamic> product) async {
-    await SupabaseService.updateProduct(id, product);
-    await loadProducts();
+    final savedProduct = await SupabaseService.updateProduct(id, product);
+    final products = state.products
+        .map(
+          (existingProduct) => existingProduct['id'].toString() == id
+              ? savedProduct
+              : existingProduct,
+        )
+        .toList();
+    ProductData.replaceProducts(products);
+    emit(state.copyWith(products: products));
   }
 
   Future<void> deleteProduct(String id) async {

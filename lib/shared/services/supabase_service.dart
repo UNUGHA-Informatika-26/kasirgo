@@ -22,6 +22,7 @@ class SupabaseService {
   static StreamSubscription<List<ConnectivityResult>>?
   _connectivitySubscription;
   static bool _isSyncing = false;
+  static Completer<void>? _syncCompleter;
 
   static String _requireUserId() {
     return client.auth.currentUser?.id ??
@@ -234,16 +235,16 @@ class SupabaseService {
   }
 
   // Tambah Produk Baru ke Database
-  static Future<void> insertProduct(Map<String, dynamic> product) async {
+  static Future<Map<String, dynamic>> insertProduct(
+    Map<String, dynamic> product,
+  ) async {
     final userId = _requireUserId();
     final record = _productRecord(userId, {
       ...product,
       'id': product['id'] ?? _uuid.v4(),
     });
-    await OfflineStore.putProduct(userId, {
-      ...record,
-      'costPrice': record['cost_price'],
-    });
+    final cachedProduct = {...record, 'costPrice': record['cost_price']};
+    await OfflineStore.putProduct(userId, cachedProduct);
     await OfflineStore.enqueue(userId, 'product_upsert', record);
     try {
       await _syncPendingChanges(throwOnFailure: true);
@@ -254,19 +255,18 @@ class SupabaseService {
       );
     }
     syncCubit.productsChanged();
+    return cachedProduct;
   }
 
   // Update Produk di Database
-  static Future<void> updateProduct(
+  static Future<Map<String, dynamic>> updateProduct(
     String id,
     Map<String, dynamic> product,
   ) async {
     final userId = _requireUserId();
     final record = _productRecord(userId, {...product, 'id': id});
-    await OfflineStore.putProduct(userId, {
-      ...record,
-      'costPrice': record['cost_price'],
-    });
+    final cachedProduct = {...record, 'costPrice': record['cost_price']};
+    await OfflineStore.putProduct(userId, cachedProduct);
     await OfflineStore.enqueue(userId, 'product_upsert', record);
     try {
       await _syncPendingChanges(throwOnFailure: true);
@@ -277,6 +277,7 @@ class SupabaseService {
       );
     }
     syncCubit.productsChanged();
+    return cachedProduct;
   }
 
   // Hapus Produk dari Database
@@ -530,13 +531,14 @@ class SupabaseService {
       return;
     }
     if (_isSyncing) {
-      if (throwOnFailure) {
-        throw StateError('Sinkronisasi lain sedang berjalan. Coba lagi.');
-      }
-      return;
+      if (!throwOnFailure) return;
+      await _syncCompleter!.future;
+      return _syncPendingChanges(throwOnFailure: true);
     }
 
     _isSyncing = true;
+    final completer = Completer<void>();
+    _syncCompleter = completer;
     try {
       final pending = OfflineStore.pendingFor(user.id);
       if (pending.isEmpty) {
@@ -589,6 +591,8 @@ class SupabaseService {
       if (throwOnFailure) rethrow;
     } finally {
       _isSyncing = false;
+      _syncCompleter = null;
+      completer.complete();
     }
   }
 }
