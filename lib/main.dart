@@ -1,7 +1,21 @@
 import 'package:flutter/material.dart';
-import 'auth/login_pages.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-void main() {
+import 'auth/cubit/auth_cubit.dart';
+import 'auth/cubit/auth_state.dart';
+import 'auth/login_pages.dart';
+import 'features/home/pages/home_page.dart';
+import 'shared/services/supabase_service.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    await SupabaseService.init();
+  } catch (e) {
+    debugPrint('Supabase Service Warning: $e');
+  }
+
   runApp(const MyApp());
 }
 
@@ -10,17 +24,20 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'KasirGo',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2563EB),
-          primary: const Color(0xFF2563EB),
+    return BlocProvider(
+      create: (_) => AuthCubit(),
+      child: MaterialApp(
+        title: 'KasirGo',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF2563EB),
+            primary: const Color(0xFF2563EB),
+          ),
+          useMaterial3: true,
         ),
-        useMaterial3: true,
+        home: const SplashScreen(),
       ),
-      home: const SplashScreen(),
     );
   }
 }
@@ -36,42 +53,58 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    // Berpindah otomatis ke Halaman Login setelah 2 detik
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const LoginPages()),
-        );
-      }
-    });
+    _openInitialPage();
+  }
+
+  Future<void> _openInitialPage() async {
+    await Future.delayed(const Duration(seconds: 2));
+    if (mounted) context.read<AuthCubit>().restoreSession();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset(
-              'assets/images/splash.png',
-              height: 180,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) {
-                return const Icon(
-                  Icons.shopping_cart_outlined,
-                  size: 100,
-                  color: Color(0xFF2563EB),
-                );
-              },
-            ),
-            const SizedBox(height: 24),
-            const CircularProgressIndicator(
-              color: Color(0xFF2563EB),
-            ),
-          ],
+    return BlocListener<AuthCubit, AuthState>(
+      listenWhen: (previous, current) =>
+          current.operation == AuthOperation.restore &&
+          current.status != AuthStatus.loading,
+      listener: (context, state) {
+        final Widget page;
+        if (state.status == AuthStatus.authenticated) {
+          page = const HomePage();
+        } else if (state.status == AuthStatus.failure) {
+          page = LoginPages(
+            initialMessage: 'Gagal memulihkan sesi: ${state.message}',
+          );
+        } else {
+          page = const LoginPages();
+        }
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => page),
+        );
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Image.asset(
+                'assets/images/splash.png',
+                height: 180,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return const Icon(
+                    Icons.shopping_cart_outlined,
+                    size: 100,
+                    color: Color(0xFF2563EB),
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+              const CircularProgressIndicator(color: Color(0xFF2563EB)),
+            ],
+          ),
         ),
       ),
     );

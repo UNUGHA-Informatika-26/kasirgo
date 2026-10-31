@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import 'cubit/auth_cubit.dart';
+import 'cubit/auth_state.dart';
 
 class RegisterPages extends StatefulWidget {
   const RegisterPages({super.key});
@@ -12,20 +16,57 @@ typedef RegisterPage = RegisterPages;
 
 class _RegisterPagesState extends State<RegisterPages> {
   final _nameController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  bool _isObscuredPassword = true;
-  bool _isObscuredConfirmPassword = true;
+  @override
+  void initState() {
+    super.initState();
+    context.read<AuthCubit>().resetRegisterPasswordVisibility();
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _addressController.dispose();
+    _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleRegister() async {
+    final name = _nameController.text.trim();
+    final address = _addressController.text.trim();
+    final phone = _phoneController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (name.isEmpty ||
+        address.isEmpty ||
+        phone.isEmpty ||
+        email.isEmpty ||
+        password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Harap lengkapi semua data pendaftaran!'),
+          backgroundColor: Color(0xFFDC2626),
+        ),
+      );
+      return;
+    }
+
+    context.read<AuthCubit>().register(
+      email: email,
+      password: password,
+      storeName: name,
+      storeAddress: address,
+      storePhone: phone,
+    );
   }
 
   @override
@@ -34,302 +75,440 @@ class _RegisterPagesState extends State<RegisterPages> {
     const textDark = Color(0xFF0F172A);
     const textGrey = Color(0xFF64748B);
     const borderColor = Color(0xFFE2E8F0);
+    final isPasswordObscured = context.select<AuthCubit, bool>(
+      (cubit) => cubit.state.isRegisterPasswordObscured,
+    );
+    final isConfirmPasswordObscured = context.select<AuthCubit, bool>(
+      (cubit) => cubit.state.isConfirmPasswordObscured,
+    );
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 16),
-                // Logo
-                Center(
-                  child: Image.asset(
-                    'assets/images/logo.png',
-                    height: 130,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(
-                        Icons.shopping_cart_outlined,
-                        size: 90,
-                        color: primaryBlue,
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Title
-                const Text(
-                  'Daftar Akun',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: textDark,
-                  ),
-                ),
-                const SizedBox(height: 28),
-
-                // Field 1: Nama Pengguna/Nama Usaha
-                const Text(
-                  'Nama Pengguna/Nama Usaha',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: textDark,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _nameController,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: textDark,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Masukkan nama pengguna atau usaha',
-                    hintStyle: const TextStyle(color: textGrey, fontSize: 14),
-                    prefixIcon: const Icon(
-                      Icons.person_outline_rounded,
-                      color: textGrey,
-                      size: 20,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: 14,
-                      horizontal: 16,
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: borderColor, width: 1.2),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: primaryBlue, width: 1.5),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-
-                // Field 2: Email
-                const Text(
-                  'Email',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: textDark,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: textDark,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Masukkan email Anda',
-                    hintStyle: const TextStyle(color: textGrey, fontSize: 14),
-                    prefixIcon: const Icon(
-                      Icons.mail_outline_rounded,
-                      color: textGrey,
-                      size: 20,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: 14,
-                      horizontal: 16,
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: borderColor, width: 1.2),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: primaryBlue, width: 1.5),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-
-                // Field 3: Password
-                const Text(
-                  'Password',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: textDark,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _passwordController,
-                  obscureText: _isObscuredPassword,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: textDark,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Masukkan password Anda',
-                    hintStyle: const TextStyle(color: textGrey, fontSize: 14),
-                    prefixIcon: const Icon(
-                      Icons.lock_outline_rounded,
-                      color: textGrey,
-                      size: 20,
-                    ),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _isObscuredPassword
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined,
-                        color: textGrey,
-                        size: 20,
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _isObscuredPassword = !_isObscuredPassword;
-                        });
-                      },
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: 14,
-                      horizontal: 16,
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: borderColor, width: 1.2),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: primaryBlue, width: 1.5),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-
-                // Field 4: Konfirmasi Password
-                const Text(
-                  'Konfirmasi Password',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: textDark,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _confirmPasswordController,
-                  obscureText: _isObscuredConfirmPassword,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: textDark,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Konfirmasi password Anda',
-                    hintStyle: const TextStyle(color: textGrey, fontSize: 14),
-                    prefixIcon: const Icon(
-                      Icons.lock_outline_rounded,
-                      color: textGrey,
-                      size: 20,
-                    ),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _isObscuredConfirmPassword
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined,
-                        color: textGrey,
-                        size: 20,
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _isObscuredConfirmPassword = !_isObscuredConfirmPassword;
-                        });
-                      },
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: 14,
-                      horizontal: 16,
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: borderColor, width: 1.2),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: primaryBlue, width: 1.5),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 28),
-
-                // Button Daftar (Primary)
-                SizedBox(
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      // Action Daftar
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryBlue,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Daftar',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Footer Text: Sudah punya akun? Masuk sekarang
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      'Sudah punya akun? ',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF94A3B8),
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () {
-                        if (Navigator.canPop(context)) {
-                          Navigator.pop(context);
-                        }
-                      },
-                      child: const Text(
-                        'Masuk sekarang',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+    return BlocListener<AuthCubit, AuthState>(
+      listenWhen: (previous, current) =>
+          current.operation == AuthOperation.register &&
+          current.status != AuthStatus.loading,
+      listener: (context, state) {
+        if (state.status == AuthStatus.registrationSuccess) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Pendaftaran akun berhasil! Silakan login.'),
+              backgroundColor: Color(0xFF10B981),
+            ),
+          );
+          if (Navigator.canPop(context)) Navigator.pop(context);
+        } else if (state.status == AuthStatus.failure) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Pendaftaran gagal: ${state.message}')),
+          );
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24.0,
+                vertical: 16.0,
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 16),
+                  // Logo
+                  Center(
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      height: 130,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.shopping_cart_outlined,
+                          size: 90,
                           color: primaryBlue,
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Title
+                  const Text(
+                    'Daftar Akun',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+
+                  // Field 1: Nama Pengguna/Nama Usaha
+                  const Text(
+                    'Nama Pengguna/Nama Usaha',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _nameController,
+                    style: const TextStyle(fontSize: 15, color: textDark),
+                    decoration: InputDecoration(
+                      hintText: 'Masukkan nama pengguna atau usaha',
+                      hintStyle: const TextStyle(color: textGrey, fontSize: 14),
+                      prefixIcon: const Icon(
+                        Icons.person_outline_rounded,
+                        color: textGrey,
+                        size: 20,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 16,
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: borderColor,
+                          width: 1.2,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: primaryBlue,
+                          width: 1.5,
                         ),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-              ],
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Field 2: Alamat Usaha/Toko
+                  const Text(
+                    'Alamat Usaha/Toko',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _addressController,
+                    maxLines: 2,
+                    style: const TextStyle(fontSize: 15, color: textDark),
+                    decoration: InputDecoration(
+                      hintText: 'Masukkan alamat lengkap toko/usaha Anda',
+                      hintStyle: const TextStyle(color: textGrey, fontSize: 14),
+                      prefixIcon: const Icon(
+                        Icons.location_on_outlined,
+                        color: textGrey,
+                        size: 20,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 16,
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: borderColor,
+                          width: 1.2,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: primaryBlue,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Field 3: No. WhatsApp / Telepon Usaha
+                  const Text(
+                    'No. WhatsApp / Telepon Usaha',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    style: const TextStyle(fontSize: 15, color: textDark),
+                    decoration: InputDecoration(
+                      hintText: 'Contoh: 081234567890',
+                      hintStyle: const TextStyle(color: textGrey, fontSize: 14),
+                      prefixIcon: const Icon(
+                        Icons.phone_android_rounded,
+                        color: textGrey,
+                        size: 20,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 16,
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: borderColor,
+                          width: 1.2,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: primaryBlue,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Field 4: Email
+                  const Text(
+                    'Email',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    style: const TextStyle(fontSize: 15, color: textDark),
+                    decoration: InputDecoration(
+                      hintText: 'Masukkan email Anda',
+                      hintStyle: const TextStyle(color: textGrey, fontSize: 14),
+                      prefixIcon: const Icon(
+                        Icons.mail_outline_rounded,
+                        color: textGrey,
+                        size: 20,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 16,
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: borderColor,
+                          width: 1.2,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: primaryBlue,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Field 5: Password
+                  const Text(
+                    'Password',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: isPasswordObscured,
+                    style: const TextStyle(fontSize: 15, color: textDark),
+                    decoration: InputDecoration(
+                      hintText: 'Masukkan password Anda',
+                      hintStyle: const TextStyle(color: textGrey, fontSize: 14),
+                      prefixIcon: const Icon(
+                        Icons.lock_outline_rounded,
+                        color: textGrey,
+                        size: 20,
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          isPasswordObscured
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          color: textGrey,
+                          size: 20,
+                        ),
+                        onPressed: context
+                            .read<AuthCubit>()
+                            .toggleRegisterPasswordVisibility,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 16,
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: borderColor,
+                          width: 1.2,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: primaryBlue,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Field 6: Konfirmasi Password
+                  const Text(
+                    'Konfirmasi Password',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _confirmPasswordController,
+                    obscureText: isConfirmPasswordObscured,
+                    style: const TextStyle(fontSize: 15, color: textDark),
+                    decoration: InputDecoration(
+                      hintText: 'Konfirmasi password Anda',
+                      hintStyle: const TextStyle(color: textGrey, fontSize: 14),
+                      prefixIcon: const Icon(
+                        Icons.lock_outline_rounded,
+                        color: textGrey,
+                        size: 20,
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          isConfirmPasswordObscured
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          color: textGrey,
+                          size: 20,
+                        ),
+                        onPressed: context
+                            .read<AuthCubit>()
+                            .toggleConfirmPasswordVisibility,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 16,
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: borderColor,
+                          width: 1.2,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: primaryBlue,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+
+                  // Button Daftar (Primary)
+                  BlocBuilder<AuthCubit, AuthState>(
+                    builder: (context, state) => SizedBox(
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: state.isLoading ? null : _handleRegister,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryBlue,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: state.isLoading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                'Daftar',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Footer Text: Sudah punya akun? Masuk sekarang
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Sudah punya akun? ',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF94A3B8),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          if (Navigator.canPop(context)) {
+                            Navigator.pop(context);
+                          }
+                        },
+                        child: const Text(
+                          'Masuk sekarang',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: primaryBlue,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
             ),
           ),
         ),
