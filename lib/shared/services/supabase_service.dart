@@ -22,6 +22,7 @@ class SupabaseService {
   static StreamSubscription<List<ConnectivityResult>>?
   _connectivitySubscription;
   static bool _isSyncing = false;
+  static bool _isSavingTransaction = false;
   static Completer<void>? _syncCompleter;
 
   static String _requireUserId() {
@@ -301,62 +302,72 @@ class SupabaseService {
     required int changeAmount,
     required List<Map<String, dynamic>> items,
   }) async {
-    final userId = _requireUserId();
-    final productsById = {
-      for (final product in await fetchProducts())
-        product['id'].toString(): product,
-    };
-
-    final itemsToInsert = items.map((item) {
-      final qty = item['quantity'] as int;
-      final price = item['unitPrice'] as int;
-      if (qty <= 0) {
-        throw StateError('Jumlah ${item['name']} harus lebih dari nol.');
-      }
-      final productId = item['id']?.toString();
-      final product = productId == null ? null : productsById[productId];
-      if (product == null) {
-        throw StateError('Produk ${item['name']} tidak ditemukan.');
-      }
-      final availableStock = (product['stock'] as num?)?.toInt() ?? 0;
-      if (qty > availableStock) {
-        throw StateError(
-          availableStock <= 0
-              ? 'Stok ${item['name']} habis.'
-              : 'Stok ${item['name']} hanya tersisa $availableStock.',
-        );
-      }
-      final costPrice = (item['costPrice'] as num?)?.toInt();
-      if (costPrice == null) {
-        throw StateError('Harga modal produk ${item['name']} tidak tersedia.');
-      }
-      return {
-        'transaction_id': trxId,
-        'product_id': item['id'],
-        'product_name': item['name'],
-        'quantity': qty,
-        'unit_price': price,
-        'unit_cost': costPrice,
-        'subtotal': qty * price,
+    if (_isSavingTransaction) {
+      throw StateError('Transaksi lain masih sedang diproses.');
+    }
+    _isSavingTransaction = true;
+    try {
+      final userId = _requireUserId();
+      final productsById = {
+        for (final product in await fetchProducts())
+          product['id'].toString(): product,
       };
-    }).toList();
 
-    final transaction = {
-      'id': trxId,
-      'user_id': userId,
-      'created_at': createdAt.toUtc().toIso8601String(),
-      'total_amount': totalAmount,
-      'payment_method': paymentMethod,
-      'cash_received': cashReceived,
-      'change_amount': changeAmount,
-      'transaction_items': itemsToInsert,
-    };
-    await OfflineStore.cacheTransaction(userId, transaction);
-    await OfflineStore.enqueue(userId, 'transaction', transaction);
-    syncCubit
-      ..productsChanged()
-      ..transactionsChanged();
-    await _syncPendingChanges();
+      final itemsToInsert = items.map((item) {
+        final qty = item['quantity'] as int;
+        final price = item['unitPrice'] as int;
+        if (qty <= 0) {
+          throw StateError('Jumlah ${item['name']} harus lebih dari nol.');
+        }
+        final productId = item['id']?.toString();
+        final product = productId == null ? null : productsById[productId];
+        if (product == null) {
+          throw StateError('Produk ${item['name']} tidak ditemukan.');
+        }
+        final availableStock = (product['stock'] as num?)?.toInt() ?? 0;
+        if (qty > availableStock) {
+          throw StateError(
+            availableStock <= 0
+                ? 'Stok ${item['name']} habis.'
+                : 'Stok ${item['name']} hanya tersisa $availableStock.',
+          );
+        }
+        final costPrice = (item['costPrice'] as num?)?.toInt();
+        if (costPrice == null) {
+          throw StateError(
+            'Harga modal produk ${item['name']} tidak tersedia.',
+          );
+        }
+        return {
+          'transaction_id': trxId,
+          'product_id': item['id'],
+          'product_name': item['name'],
+          'quantity': qty,
+          'unit_price': price,
+          'unit_cost': costPrice,
+          'subtotal': qty * price,
+        };
+      }).toList();
+
+      final transaction = {
+        'id': trxId,
+        'user_id': userId,
+        'created_at': createdAt.toUtc().toIso8601String(),
+        'total_amount': totalAmount,
+        'payment_method': paymentMethod,
+        'cash_received': cashReceived,
+        'change_amount': changeAmount,
+        'transaction_items': itemsToInsert,
+      };
+      await OfflineStore.cacheTransaction(userId, transaction);
+      await OfflineStore.enqueue(userId, 'transaction', transaction);
+      syncCubit
+        ..productsChanged()
+        ..transactionsChanged();
+      await _syncPendingChanges();
+    } finally {
+      _isSavingTransaction = false;
+    }
   }
 
   // Ambil Riwayat Transaksi

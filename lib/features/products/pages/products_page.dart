@@ -356,74 +356,98 @@ class _ProductsPageState extends State<ProductsPage> {
               const SizedBox(height: 20),
 
               // Button Simpan
-              SizedBox(
-                height: 48,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2563EB),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              BlocBuilder<ProductsCubit, ProductsState>(
+                bloc: _productsCubit,
+                builder: (context, state) => SizedBox(
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                  ),
-                  onPressed: () async {
-                    final name = nameController.text.trim();
-                    final barcode = barcodeController.text.trim();
-                    final costPrice =
-                        int.tryParse(costPriceController.text) ?? 0;
-                    final price = int.tryParse(priceController.text) ?? 0;
-                    final stock = int.tryParse(stockController.text);
+                    onPressed: state.isSaving
+                        ? null
+                        : () async {
+                            final name = nameController.text.trim();
+                            final barcode = barcodeController.text.trim();
+                            final costPrice =
+                                int.tryParse(costPriceController.text) ?? 0;
+                            final price =
+                                int.tryParse(priceController.text) ?? 0;
+                            final stock = int.tryParse(stockController.text);
 
-                    if (name.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Nama barang wajib diisi.'),
-                        ),
-                      );
-                      return;
-                    }
-                    if (stock == null || stock < 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Stok harus berupa angka nol atau lebih.'),
-                        ),
-                      );
-                      return;
-                    }
+                            if (name.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Nama barang wajib diisi.'),
+                                ),
+                              );
+                              return;
+                            }
+                            if (stock == null || stock < 0) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Stok harus berupa angka nol atau lebih.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
 
-                    final product = {
-                      'name': name,
-                      'barcode': barcode,
-                      'costPrice': costPrice,
-                      'price': price,
-                      'stock': stock,
-                      'status': stock > 0 ? 'tersedia' : 'habis',
-                    };
-                    try {
-                      if (isEdit) {
-                        await _productsCubit.updateProduct(
-                          existingProduct['id'].toString(),
-                          product,
-                        );
-                      } else {
-                        await _productsCubit.insertProduct(product);
-                      }
-                      if (context.mounted) Navigator.pop(context);
-                    } catch (error) {
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Gagal menyimpan produk: $error'),
-                        ),
-                      );
-                    }
-                  },
-                  child: Text(
-                    isEdit ? 'Simpan Perubahan' : 'Tambah Barang',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
+                            final product = {
+                              'name': name,
+                              'barcode': barcode,
+                              'costPrice': costPrice,
+                              'price': price,
+                              'stock': stock,
+                              'status': stock > 0 ? 'tersedia' : 'habis',
+                            };
+                            try {
+                              final bool saved;
+                              if (isEdit) {
+                                saved = await _productsCubit.updateProduct(
+                                  existingProduct['id'].toString(),
+                                  product,
+                                );
+                              } else {
+                                saved = await _productsCubit.insertProduct(
+                                  product,
+                                );
+                              }
+                              if (saved && context.mounted) {
+                                Navigator.pop(context);
+                              }
+                            } catch (error) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Gagal menyimpan produk: $error',
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                    child: state.isSaving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            isEdit ? 'Simpan Perubahan' : 'Tambah Barang',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ),
               ),
@@ -449,25 +473,45 @@ class _ProductsPageState extends State<ProductsPage> {
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Batal'),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
-              foregroundColor: Colors.white,
+          BlocBuilder<ProductsCubit, ProductsState>(
+            bloc: _productsCubit,
+            builder: (context, state) => ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: state.isSaving
+                  ? null
+                  : () async {
+                      try {
+                        final deleted = await _productsCubit.deleteProduct(
+                          product['id'].toString(),
+                        );
+                        if (!deleted || !mounted || !dialogContext.mounted) {
+                          return;
+                        }
+                      } catch (error) {
+                        if (!dialogContext.mounted) return;
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          SnackBar(
+                            content: Text('Gagal menghapus produk: $error'),
+                          ),
+                        );
+                        return;
+                      }
+                      if (dialogContext.mounted) Navigator.pop(dialogContext);
+                    },
+              child: state.isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Hapus'),
             ),
-            onPressed: () async {
-              try {
-                await _productsCubit.deleteProduct(product['id'].toString());
-                if (!mounted || !dialogContext.mounted) return;
-              } catch (error) {
-                if (!dialogContext.mounted) return;
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  SnackBar(content: Text('Gagal menghapus produk: $error')),
-                );
-                return;
-              }
-              if (dialogContext.mounted) Navigator.pop(dialogContext);
-            },
-            child: const Text('Hapus'),
           ),
         ],
       ),
@@ -687,11 +731,8 @@ class _ProductsPageState extends State<ProductsPage> {
                                       const SizedBox(height: 2),
                                       Text(
                                         stockLabel,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                        ).copyWith(
-                                          color: stockColor,
-                                        ),
+                                        style: const TextStyle(fontSize: 12)
+                                            .copyWith(color: stockColor),
                                       ),
                                     ],
                                   ),
