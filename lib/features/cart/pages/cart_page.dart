@@ -25,6 +25,7 @@ class _CartPageState extends State<CartPage> {
   final CartCubit _cartCubit = CartCubit();
   StreamSubscription<SyncState>? _syncSubscription;
   late int _lastProductsRevision;
+  bool _isPaymentModalOpen = false;
 
   @override
   void initState() {
@@ -164,7 +165,8 @@ class _CartPageState extends State<CartPage> {
   }
 
   // Mengubah Alur "TRANSAKSI SELESAI" -> Buka Modal Bottom Sheet Pembayaran Dulu
-  void _openPaymentModal() {
+  Future<void> _openPaymentModal() async {
+    if (_isPaymentModalOpen) return;
     if (_cartItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -175,52 +177,65 @@ class _CartPageState extends State<CartPage> {
       return;
     }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) {
-        return _PaymentModalSheet(
-          totalBayar: _totalBayar,
-          totalItems: _totalUnitsCount,
-          formatRupiah: _formatRupiah,
-          onPaymentCompleted: (method, cashReceived, kembalian) async {
-            final now = DateTime.now();
-            final trxId =
-                'TRX-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.microsecondsSinceEpoch}';
-            try {
-              await SupabaseService.saveTransaction(
-                trxId: trxId,
-                createdAt: now,
-                totalAmount: _totalBayar,
-                paymentMethod: method,
-                cashReceived: cashReceived,
-                changeAmount: kembalian,
-                items: List<Map<String, dynamic>>.from(
-                  _cartItems.map((item) => Map<String, dynamic>.from(item)),
-                ),
-              );
-              if (!mounted) return;
-              _showReceiptPage(
-                trxId: trxId,
-                createdAt: now,
-                method: method,
-                cashReceived: cashReceived,
-                kembalian: kembalian,
-              );
-            } catch (error) {
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Transaksi gagal disimpan: $error')),
-              );
-            }
-          },
-        );
-      },
-    );
+    setState(() => _isPaymentModalOpen = true);
+    try {
+      final result = await showModalBottomSheet<_PaymentResult>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (_) {
+          return _PaymentModalSheet(
+            totalBayar: _totalBayar,
+            totalItems: _totalUnitsCount,
+            formatRupiah: _formatRupiah,
+            onPaymentCompleted: (method, cashReceived, kembalian) async {
+              final now = DateTime.now();
+              final trxId =
+                  'TRX-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.microsecondsSinceEpoch}';
+              try {
+                await SupabaseService.saveTransaction(
+                  trxId: trxId,
+                  createdAt: now,
+                  totalAmount: _totalBayar,
+                  paymentMethod: method,
+                  cashReceived: cashReceived,
+                  changeAmount: kembalian,
+                  items: List<Map<String, dynamic>>.from(
+                    _cartItems.map((item) => Map<String, dynamic>.from(item)),
+                  ),
+                );
+                return _PaymentResult(
+                  trxId: trxId,
+                  createdAt: now,
+                  method: method,
+                  cashReceived: cashReceived,
+                  kembalian: kembalian,
+                );
+              } catch (error) {
+                if (!mounted) return null;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Transaksi gagal disimpan: $error')),
+                );
+                return null;
+              }
+            },
+          );
+        },
+      );
+      if (!mounted || result == null) return;
+      _showReceiptPage(
+        trxId: result.trxId,
+        createdAt: result.createdAt,
+        method: result.method,
+        cashReceived: result.cashReceived,
+        kembalian: result.kembalian,
+      );
+    } finally {
+      if (mounted) setState(() => _isPaymentModalOpen = false);
+    }
   }
 
   // Menampilkan Halaman Struk Transaksi Selesai (Fullscreen)
@@ -701,8 +716,7 @@ class _CartPageState extends State<CartPage> {
                                           // Plus Button
                                           GestureDetector(
                                             onTap: canIncrement
-                                                ? () =>
-                                                      _incrementQuantity(item)
+                                                ? () => _incrementQuantity(item)
                                                 : null,
                                             child: Container(
                                               width: 28,
@@ -802,7 +816,7 @@ class _CartPageState extends State<CartPage> {
                     width: double.infinity,
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: _openPaymentModal,
+                      onPressed: _isPaymentModalOpen ? null : _openPaymentModal,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: successGreen,
                         foregroundColor: Colors.white,
@@ -831,12 +845,32 @@ class _CartPageState extends State<CartPage> {
   }
 }
 
+class _PaymentResult {
+  final String trxId;
+  final DateTime createdAt;
+  final String method;
+  final int cashReceived;
+  final int kembalian;
+
+  const _PaymentResult({
+    required this.trxId,
+    required this.createdAt,
+    required this.method,
+    required this.cashReceived,
+    required this.kembalian,
+  });
+}
+
 // Modal Sheet Pembayaran (Muncul setelah klik "TRANSAKSI SELESAI")
 class _PaymentModalSheet extends StatefulWidget {
   final int totalBayar;
   final int totalItems;
   final String Function(int) formatRupiah;
-  final Future<void> Function(String method, int cashReceived, int kembalian)
+  final Future<_PaymentResult?> Function(
+    String method,
+    int cashReceived,
+    int kembalian,
+  )
   onPaymentCompleted;
 
   const _PaymentModalSheet({
@@ -853,6 +887,7 @@ class _PaymentModalSheet extends StatefulWidget {
 class _PaymentModalSheetState extends State<_PaymentModalSheet> {
   late TextEditingController _cashController;
   late final PaymentCubit _paymentCubit;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -1179,21 +1214,45 @@ class _PaymentModalSheetState extends State<_PaymentModalSheet> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                onPressed: () async {
-                  final method = paymentState.selectedMethod;
-                  final cashReceived = method == 'Tunai'
-                      ? paymentState.cashReceived
-                      : widget.totalBayar;
-                  final change = method == 'Tunai'
-                      ? paymentState.changeFor(widget.totalBayar)
-                      : 0;
-                  Navigator.pop(context);
-                  await widget.onPaymentCompleted(method, cashReceived, change);
-                },
-                child: const Text(
-                  'Selesaikan Pembayaran',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                ),
+                onPressed: _isSaving
+                    ? null
+                    : () async {
+                        final method = paymentState.selectedMethod;
+                        final cashReceived = method == 'Tunai'
+                            ? paymentState.cashReceived
+                            : widget.totalBayar;
+                        final change = method == 'Tunai'
+                            ? paymentState.changeFor(widget.totalBayar)
+                            : 0;
+                        setState(() => _isSaving = true);
+                        final result = await widget.onPaymentCompleted(
+                          method,
+                          cashReceived,
+                          change,
+                        );
+                        if (!context.mounted) return;
+                        if (result != null) {
+                          Navigator.pop(context, result);
+                        } else {
+                          setState(() => _isSaving = false);
+                        }
+                      },
+                child: _isSaving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        'Selesaikan Pembayaran',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ),
           ],
