@@ -195,5 +195,5 @@ flutter test
 - `SupabaseService` dan `OfflineStore` adalah lapisan service/data utama.
 - `UserData` menyimpan sebagian data profil toko dalam properti statis yang digunakan oleh halaman aplikasi.
 - Data transaksi offline menggunakan UUID dan akan disinkronkan ketika memungkinkan.
+- Jalankan `flutter analyze` dan `flutter test` sebelum rilis untuk memeriksa kode dan test otomatis.
 - Sebelum deployment production, verifikasi credential, permission kamera/Bluetooth, kebijakan keamanan Supabase, dan migration database.
-
